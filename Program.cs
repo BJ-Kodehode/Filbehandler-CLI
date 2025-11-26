@@ -8,21 +8,45 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Spectre.Console;
 
+/// <summary>
+/// File Organizer CLI - Main Entry Point
+/// 
+/// This application provides three main commands:
+/// 1. organize    - Sort files by type or custom criteria with dry-run support
+/// 2. analyze-csv - Analyze gzipped CSV files with automatic statistics
+/// 3. import-jsonstat - Convert JSON-stat datasets to CSV
+/// 
+/// Architecture:
+/// - Uses Microsoft.Extensions.Hosting for dependency injection and configuration
+/// - Spectre.Console for rich, color-coded terminal output
+/// - CsvHelper for robust CSV parsing
+/// - Streaming patterns for memory-efficient large file processing
+/// </summary>
+
+// Build the host with dependency injection configuration
 using var host = Host.CreateDefaultBuilder(args)
     .ConfigureServices((ctx, services) =>
     {
+        // Register FileOptions from configuration (could be loaded from appsettings.json)
         services.Configure<FileOptions>(ctx.Configuration.GetSection("FileOptions"));
+        
+        // Register core services: file organizer, dry-run logger
         services.AddSingleton<IFileOrganizer, FileOrganizer>();
         services.AddSingleton<IDryRunService, DryRunService>();
+        
+        // Add console logging for tracing operations
         services.AddLogging(cfg => cfg.AddConsole());
     })
     .Build();
 
+// Resolve the organizer service for use in command handlers
 var organizer = host.Services.GetRequiredService<IFileOrganizer>();
 
+// Display welcome banner
 AnsiConsole.MarkupLine("[bold cyan]File Organizer CLI[/] - organize files, analyze CSV and import JSON-stat");
 AnsiConsole.MarkupLine("[dim]v1.0[/]\n");
 
+// Show help if no arguments provided, otherwise route to appropriate command handler
 if (args.Length == 0)
 {
     ShowHelp();
@@ -60,6 +84,9 @@ catch (Exception ex)
     Environment.Exit(1);
 }
 
+/// <summary>
+/// Displays help information and usage examples for all commands.
+/// </summary>
 void ShowHelp()
 {
     AnsiConsole.MarkupLine("[bold]Commands:[/]");
@@ -81,11 +108,16 @@ void ShowHelp()
     AnsiConsole.MarkupLine("  [dim]dotnet run -- import-jsonstat data.json out.csv[/]");
 }
 
+/// <summary>
+/// Handles the 'organize' command.
+/// Parses command-line arguments for path and dry-run flag, then executes file organization.
+/// </summary>
 async Task HandleOrganize(string[] args, IFileOrganizer organizer)
 {
     var path = Environment.CurrentDirectory;
     var dry = false;
 
+    // Parse optional arguments
     for (int i = 1; i < args.Length; i++)
     {
         if (args[i] == "--path" || args[i] == "-p")
@@ -104,6 +136,11 @@ async Task HandleOrganize(string[] args, IFileOrganizer organizer)
     AnsiConsole.MarkupLine("[bold green]Done![/]");
 }
 
+/// <summary>
+/// Handles the 'analyze-csv' command.
+/// Validates file path and calls CsvAnalyzer to generate statistics.
+/// Displays results in a formatted table.
+/// </summary>
 async Task HandleAnalyzeCsv(string[] args)
 {
     if (args.Length < 2)
@@ -121,8 +158,11 @@ async Task HandleAnalyzeCsv(string[] args)
     }
 
     AnsiConsole.MarkupLine($"[bold]Analyzing[/] {file}...");
+    
+    // Stream and analyze the gzipped CSV
     var stats = await CsvAnalyzer.AnalyzeGzippedCsvAsync(file, CancellationToken.None);
 
+    // Display summary and column statistics in a table
     AnsiConsole.MarkupLine($"[bold green]Rows:[/] {stats.RowCount}");
     var table = new Table();
     table.AddColumn("Column Name");
@@ -141,6 +181,10 @@ async Task HandleAnalyzeCsv(string[] args)
     AnsiConsole.Write(table);
 }
 
+/// <summary>
+/// Handles the 'import-jsonstat' command.
+/// Validates input/output paths and calls JsonStatImporter to flatten JSON-stat to CSV.
+/// </summary>
 async Task HandleImportJsonStat(string[] args)
 {
     if (args.Length < 3)
@@ -160,6 +204,8 @@ async Task HandleImportJsonStat(string[] args)
     }
 
     AnsiConsole.MarkupLine($"[bold]Converting[/] {input} [yellow]->[/] {output}...");
+    
+    // Convert JSON-stat to flattened CSV
     await JsonStatImporter.ConvertJsonStatToCsvAsync(input, output);
     AnsiConsole.MarkupLine($"[bold green]Done![/]");
 }
