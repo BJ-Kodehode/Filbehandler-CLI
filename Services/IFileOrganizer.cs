@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 
 /// <summary>
@@ -30,22 +26,8 @@ public interface IFileOrganizer
 /// Default implementation of IFileOrganizer.
 /// Organizes files in a directory into subdirectories based on type or custom grouping.
 /// </summary>
-public class FileOrganizer : IFileOrganizer
+public class FileOrganizer(ILogger<FileOrganizer> logger, IDryRunService dryRun) : IFileOrganizer
 {
-    private readonly ILogger<FileOrganizer> _logger;
-    private readonly IDryRunService _dryRun;
-
-    /// <summary>
-    /// Initializes a new FileOrganizer with dependency injection.
-    /// </summary>
-    /// <param name="logger">Logger instance for tracing operations.</param>
-    /// <param name="dryRun">Service for logging dry-run actions.</param>
-    public FileOrganizer(ILogger<FileOrganizer> logger, IDryRunService dryRun)
-    {
-        _logger = logger;
-        _dryRun = dryRun;
-    }
-
     /// <summary>
     /// Preview files that would be organized without moving them.
     /// </summary>
@@ -63,6 +45,8 @@ public class FileOrganizer : IFileOrganizer
     /// </summary>
     public async Task ExecuteAsync(FileOptions options, CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(options);
+        
         // Get preview of actions
         var actions = await PreviewAsync(options, ct);
 
@@ -71,14 +55,14 @@ public class FileOrganizer : IFileOrganizer
             if (options.DryRun)
             {
                 // Dry-run mode: log the action without moving the file
-                _dryRun.Log(a);
+                dryRun.Log(a);
             }
             else
             {
                 // Actual mode: create target directory if needed, move file, log
+                logger.LogInformation("Moving: {Source} -> {Target}", a.Source, a.Target);
                 // Implementation: Directory.CreateDirectory(Path.GetDirectoryName(a.Target))
                 //                File.Move(a.Source, a.Target, overwrite: true)
-                //                _logger.LogInformation("Moved: {Source} -> {Target}", a.Source, a.Target)
             }
         }
     }
